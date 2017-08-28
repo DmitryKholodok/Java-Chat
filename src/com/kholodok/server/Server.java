@@ -154,7 +154,9 @@ public class Server {
                 out.close();
                 socket.close();
 
-                connections.remove(this);
+                synchronized (connections) {
+                    connections.remove(this);
+                }
 
             } catch (IOException e) {
                 e.printStackTrace();
