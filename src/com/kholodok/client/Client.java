@@ -22,7 +22,7 @@ public class Client {
 
             socket = new Socket(IP, DEFAULT_PORT);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            out = new PrintWriter(socket.getOutputStream());
+            out = new PrintWriter(socket.getOutputStream(), true);
 
             work();
 
@@ -77,10 +77,13 @@ public class Client {
         @Override
         public void run() {
 
+            String msg = "";
             try {
 
                 while (!isStop) {
-                    String msg = in.readLine();
+                    while((msg = in.readLine()) == null) {
+                        if (isStop) return;
+                    }
                     System.out.println(msg);
                 }
 
