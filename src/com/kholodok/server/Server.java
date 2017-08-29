@@ -22,9 +22,9 @@ public class Server {
     private int port;
     private ServerSocket serverSocket;
     private List<Connection> connections;
-    private static ExecutorService executorService;
+    private ExecutorService executorService;
 
-    private Server() {
+    public Server() {
         this(DEFAULT_PORT);
     }
 
@@ -35,11 +35,12 @@ public class Server {
         try {
 
             serverSocket = new ServerSocket(DEFAULT_PORT);
+            System.out.println("ServerSocket is ready!");
 
             work();
 
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("ServerSocket create error.");
         }
     }
 
@@ -48,27 +49,29 @@ public class Server {
         executorService = Executors.newFixedThreadPool(THREAD_COUNT);
         connections = Collections.synchronizedList(new ArrayList<Connection>());
 
-        while (true) {
+        try {
 
-            try {
+            while (true) {
 
-                Socket socket = serverSocket.accept();
+                Socket socket = null;
+                try {
+                    socket = serverSocket.accept();
+                } catch (IOException e) {
+                    System.err.println("Socket create error.");
+                }
 
                 Connection connection = new Connection(socket);
                 connections.add(connection);
+
                 executorService.execute(connection);
-
-            } catch (IOException e) {
-
-                e.printStackTrace();
-
-            } finally {
-
-                closeAllConnections();
-                executorService.shutdown();
-
             }
+
+        } finally {
+
+            closeAllConnections();
+            executorService.shutdown();
         }
+
     }
 
     private void closeAllConnections() {
@@ -79,20 +82,22 @@ public class Server {
 
                 Iterator<Connection> iterator = connections.iterator();
                 while (iterator.hasNext()) {
-                    iterator.next().close();
+                   iterator.next().close();
                 }
             }
 
         } catch (Exception ex) {
-            ex.printStackTrace();
+            System.err.println("Closing error.");
         }
 
     }
 
     private void sendToAllClient(Connection unnecessaryConn, String msg)  {
-        for (Connection connection : connections) {
-            if (connection == unnecessaryConn) continue;
-            connection.out.println(msg);
+        synchronized (connections) {
+            for (Connection connection : connections) {
+                if (connection == unnecessaryConn) continue;
+                connection.out.println(msg);
+            }
         }
     }
 
@@ -100,7 +105,6 @@ public class Server {
 
         private BufferedReader in;
         private PrintWriter out;
-
         private Socket socket;
 
         private Connection(Socket socket) {
@@ -118,29 +122,30 @@ public class Server {
             }
         }
 
-
         @Override
         public void run() {
 
-            String msg;
-
-            UUID uniqueName = UUID.randomUUID();
-            Server.this.sendToAllClient(this, uniqueName + " came.");
+            String msg = new String();
 
             try {
 
+                Server.this.sendToAllClient(this,
+                        Thread.currentThread().getName() + " is here.");
+
                 while (true) {
-                    msg = in.readLine();
+
+                    while((msg = in.readLine()) == null) {};
+
                     if (msg.equals("exit")) break;
                     Server.this.sendToAllClient(this,
-                            uniqueName + " : " + msg);
+                            Thread.currentThread().getName() + " : " + msg);
                 }
 
-                Server.this.sendToAllClient(this,
-                        uniqueName + " has left." );
+                Server.this.sendToAllClient( this,
+                        Thread.currentThread().getName() + " : " + msg);
 
             } catch (IOException ex){
-                ex.fillInStackTrace();
+                System.err.println("Error!");
             } finally {
                 close();
             }
@@ -163,7 +168,6 @@ public class Server {
             }
 
         }
-
     }
 
     public static void main(String[] args) {
