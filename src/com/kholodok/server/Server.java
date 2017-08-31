@@ -18,11 +18,14 @@ public class Server {
     private static final int DEFAULT_PORT = 11000;
     private static final String IP = "127.0.0.1";
     private static final int THREAD_COUNT = 5;
+    private static final byte MSG_SAVE_COUNT = 10;
 
     private int port;
     private ServerSocket serverSocket;
     private List<Connection> connections;
     private ExecutorService executorService;
+    private MessagesHistory messagesHistory;
+
 
     public Server() {
         this(DEFAULT_PORT);
@@ -31,6 +34,7 @@ public class Server {
     private Server(int port) {
 
         this.port = port;
+        messagesHistory = new MessagesHistory(MSG_SAVE_COUNT);
 
         try {
 
@@ -107,6 +111,8 @@ public class Server {
         private PrintWriter out;
         private Socket socket;
 
+        private String userName;
+
         private Connection(Socket socket) {
 
             this.socket = socket;
@@ -122,32 +128,51 @@ public class Server {
             }
         }
 
+        private String getFullMsg(String msg) {
+            return userName + " : " + msg;
+        }
+
         @Override
         public void run() {
 
-            String msg = new String();
+            writeLastMsgs();
 
+            String msg = new String();
+            userName = Thread.currentThread().getName();
             try {
 
                 Server.this.sendToAllClient(this,
-                        Thread.currentThread().getName() + " is here.");
+                         getFullMsg("is here."));
 
                 while (true) {
 
                     while((msg = in.readLine()) == null) {};
 
                     if (msg.equals("exit")) break;
+
+                    messagesHistory.addMsgToList(getFullMsg(msg));
+
                     Server.this.sendToAllClient(this,
-                            Thread.currentThread().getName() + " : " + msg);
+                            getFullMsg(msg));
                 }
 
                 Server.this.sendToAllClient( this,
-                        Thread.currentThread().getName() + " : " + msg);
+                        getFullMsg(msg));
 
             } catch (IOException ex){
                 System.err.println("Error!");
             } finally {
                 close();
+            }
+        }
+
+
+
+        private void writeLastMsgs() {
+            List<String> lastMsgs = messagesHistory.getMsgList();
+            if (lastMsgs != null) {
+                for (String msg : lastMsgs)
+                    System.out.println(msg);
             }
         }
 
