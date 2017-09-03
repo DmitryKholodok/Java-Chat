@@ -1,5 +1,7 @@
 package com.kholodok.client;
 
+import com.kholodok.User;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -15,6 +17,7 @@ public class Client {
     private BufferedReader in;
     private PrintWriter out;
     private Socket socket;
+    private User user;
 
     private Client() {
 
@@ -23,6 +26,8 @@ public class Client {
             socket = new Socket(IP, DEFAULT_PORT);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
+
+            user = new User();
 
             work();
 
@@ -41,13 +46,20 @@ public class Client {
 
         Scanner scanner = new Scanner(System.in);
 
+        System.out.println("Enter your name: ");
+        user.setName(scanner.nextLine());
+
         String str = "";
 
         while (!str.equals("exit")) {
             str = scanner.nextLine();
-            out.println(str);
+            sendMsgWithUserInfo(str);
         }
         connectionIn.setStop();
+    }
+
+    private void sendMsgWithUserInfo(String msg) {
+        out.println(user.getName() + " : " + msg);
     }
 
     private void close() {
