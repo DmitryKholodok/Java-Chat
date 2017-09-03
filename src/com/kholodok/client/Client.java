@@ -1,33 +1,35 @@
 package com.kholodok.client;
 
 import com.kholodok.User;
+import com.kholodok.message.ClientMessage;
+import com.kholodok.message.ServerMessage;
+import com.kholodok.message.UserStatus;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
 
 public class Client {
 
-    private static final int DEFAULT_PORT = 11000;
+    private static final int DEFAULT_PORT = 11001;
     private static final String IP = "127.0.0.1";
 
-    private BufferedReader in;
-    private PrintWriter out;
+    private ObjectInputStream in;
+    private ObjectOutputStream out;
     private Socket socket;
     private User user;
+    private Scanner scanner;
 
     private Client() {
 
         try {
 
             socket = new Socket(IP, DEFAULT_PORT);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            out = new PrintWriter(socket.getOutputStream(), true);
+            in = new ObjectInputStream(socket.getInputStream());
+            out = new ObjectOutputStream(socket.getOutputStream());
 
-            user = new User();
+            scanner = new Scanner(System.in);
+            userInit();
 
             work();
 
@@ -39,27 +41,61 @@ public class Client {
         }
     }
 
+    private void userInit() throws IOException {
+
+        System.out.println("Enter your name: ");
+        user = new User(scanner.nextLine());
+
+    }
+
     private void work() throws IOException {
 
         ConnectionIn connectionIn = new ConnectionIn();
         connectionIn.start();
 
-        Scanner scanner = new Scanner(System.in);
+        // init clientMessage
+        ClientMessage clientMessage = createMessage("");
 
-        System.out.println("Enter your name: ");
-        user.setName(scanner.nextLine());
+        // sendBaseUserInfoToServer
+        out.writeObject(clientMessage);
 
         String str = "";
-
         while (!str.equals("exit")) {
             str = scanner.nextLine();
-            sendMsgWithUserInfo(str);
+            if (str.equals("changeStatus")) changeUserStatus();
+            else {
+                clientMessage = createMessage(str);
+                out.writeObject(clientMessage);
+            }
         }
         connectionIn.setStop();
     }
 
-    private void sendMsgWithUserInfo(String msg) {
-        out.println(user.getName() + " : " + msg);
+    private void changeUserStatus() throws IOException {
+        UserStatus userStatus;
+        switch (scanner.nextInt()) {
+            case 0:
+                userStatus = UserStatus.EAT;
+                break;
+            case 1:
+                userStatus = UserStatus.SLEEP;
+                break;
+            case 2:
+                userStatus = UserStatus.SLEEP;
+                break;
+            case 3:
+                userStatus = UserStatus.NOTHING;
+                break;
+            default:
+                throw new IOException("Incorrect user status!");
+        }
+        user.setUserStatus(userStatus);
+    }
+
+    private ClientMessage createMessage(String msg) {
+        ClientMessage clientMessage = new ClientMessage(
+                user.getName(), user.getUserIp(), msg, user.getUserStatus());
+        return clientMessage;
     }
 
     private void close() {
@@ -76,6 +112,7 @@ public class Client {
 
     }
 
+
     private class ConnectionIn extends Thread {
 
         private boolean isStop; //  default - false
@@ -89,17 +126,19 @@ public class Client {
         @Override
         public void run() {
 
-            String msg = "";
+            Object msg = null;
             try {
 
                 while (!isStop) {
-                    while((msg = in.readLine()) == null) {
+                    while((msg = in.readObject()) == null) {
                         if (isStop) return;
                     }
-                    System.out.println(msg);
+                    System.out.println(((ServerMessage)msg).toString());
                 }
 
             } catch (IOException e) {
+                e.printStackTrace();
+            } catch (ClassNotFoundException e) {
                 e.printStackTrace();
             }
         }

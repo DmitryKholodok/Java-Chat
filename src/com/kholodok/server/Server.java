@@ -1,9 +1,10 @@
 package com.kholodok.server;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import com.kholodok.client.Client;
+import com.kholodok.message.ClientMessage;
+import com.kholodok.message.ServerMessage;
+
+import java.io.*;
 
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -15,7 +16,7 @@ import java.util.concurrent.Executors;
 
 public class Server {
 
-    private static final int DEFAULT_PORT = 11000;
+    private static final int DEFAULT_PORT = 11001;
     private static final String IP = "127.0.0.1";
     private static final int THREAD_COUNT = 5;
     private static final byte MSG_SAVE_COUNT = 10;
@@ -24,7 +25,7 @@ public class Server {
     private ServerSocket serverSocket;
     private List<Connection> connections;
     private ExecutorService executorService;
-    private MessagesHistory messagesHistory;
+    private MessagesHistory<ServerMessage> messagesHistory;
 
 
     public Server() {
@@ -96,22 +97,22 @@ public class Server {
 
     }
 
-    private void sendToAllClient(Connection unnecessaryConn, String msg)  {
+    //except unnecessaryConn
+    private void sendToAllClient(Connection unnecessaryConn, ServerMessage serverMessage)
+            throws IOException {
         synchronized (connections) {
             for (Connection connection : connections) {
                 if (connection == unnecessaryConn) continue;
-                connection.out.println(msg);
+                connection.out.writeObject(serverMessage);
             }
         }
     }
 
     private class Connection implements Runnable {
 
-        private BufferedReader in;
-        private PrintWriter out;
+        private ObjectInputStream in;
+        private ObjectOutputStream out;
         private Socket socket;
-
-        private String userName;
 
         private Connection(Socket socket) {
 
@@ -119,8 +120,8 @@ public class Server {
 
             try {
 
-                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                out = new PrintWriter(socket.getOutputStream(), true);
+                out = new ObjectOutputStream(socket.getOutputStream());
+                in = new ObjectInputStream(socket.getInputStream());
 
             } catch (IOException e) {
                 e.printStackTrace();
@@ -128,52 +129,73 @@ public class Server {
             }
         }
 
-        private String getFullMsg(String msg) {
-            return userName + " : " + msg;
-        }
-
         @Override
         public void run() {
 
             writeLastMsgs();
 
-            String msg = new String();
-            userName = Thread.currentThread().getName();
+            String userName = "";
+            Object msg = null;
             try {
 
-                Server.this.sendToAllClient(this,
-                         getFullMsg("is here."));
+                // saving the user info
+                userName = initUser();
 
                 while (true) {
 
-                    while((msg = in.readLine()) == null) {};
+                    ClientMessage clientMessage = (ClientMessage) in.readObject();
+                    ServerMessage serverMessage = new ServerMessage(clientMessage);
 
-                    if (msg.equals("exit")) break;
+                    if (serverMessage.getClientMessage().equals("exit")) break;
 
-                    messagesHistory.addMsgToList(getFullMsg(msg));
+                    messagesHistory.addMsgToList(serverMessage);
 
-                    Server.this.sendToAllClient(this,
-                            getFullMsg(msg));
+                    Server.this.sendToAllClient(this, serverMessage);
                 }
-
-                Server.this.sendToAllClient( this,
-                        getFullMsg(msg));
 
             } catch (IOException ex){
                 System.err.println("Error!");
+            } catch (ClassNotFoundException e) {
+                e.printStackTrace();
             } finally {
+                try {
+                    destroyUser(userName);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 close();
             }
         }
 
+        private String initUser() throws IOException, ClassNotFoundException {
+            ClientMessage clientMsg = (ClientMessage) in.readObject();
+            String name = clientMsg.getUserName();
+            sendJustServerMsg(name + " is here.");
+            return name;
+        }
 
+        private void sendJustServerMsg(String serverMsg) throws IOException {
+            ServerMessage clientIsHereMsg = new ServerMessage(null);
+            clientIsHereMsg.setMsg(serverMsg);
+            sendToAllClient(this, clientIsHereMsg);
+        }
+
+        private void destroyUser(String name) throws IOException {
+            sendJustServerMsg(name + "  went out.");
+        }
 
         private void writeLastMsgs() {
-            List<String> lastMsgs = messagesHistory.getMsgList();
-            if (lastMsgs != null) {
-                for (String msg : lastMsgs)
-                    System.out.println(msg);
+            List<ServerMessage> lastMsgs = messagesHistory.getMsgList();
+            try {
+                if (lastMsgs != null) {
+                    for (ServerMessage serverMessage : lastMsgs)
+                        out.writeObject(serverMessage);
+                }
+            } catch (IOException ex)
+            {
+                ex.fillInStackTrace();
             }
+
         }
 
         public void close() {

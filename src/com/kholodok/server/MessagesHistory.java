@@ -2,17 +2,17 @@ package com.kholodok.server;
 
 import java.util.*;
 
-public class MessagesHistory {
+public class MessagesHistory<E> {
 
     private static final byte limitCount = Byte.MAX_VALUE;
 
     private int count;
-    private List<String> messageList;
+    private List<E> messageList;
 
     public MessagesHistory(int count) {
         this.count = count;
         messageList = Collections.synchronizedList(
-                new ArrayList<String>());
+                new ArrayList<E>());
     }
 
     private byte getMsgCount() {
@@ -20,7 +20,7 @@ public class MessagesHistory {
 
     }
 
-    public void addMsgToList(String msg) {
+    public void addMsgToList(E msg) {
         synchronized (messageList) {
             if (messageList.size() == limitCount)
                 refreshList();
@@ -30,16 +30,16 @@ public class MessagesHistory {
 
     //synchronized
     private void refreshList() {
-        List<String> tempList = new ArrayList<String>(
+        List<E> tempList = new ArrayList<E>(
                 messageList.subList(limitCount - count + 1, limitCount));
         messageList.clear();
         messageList.addAll(tempList);
     }
 
-    public List<String> getMsgList() {
+    public List<E> getMsgList() {
         synchronized (messageList) {
             if (getMsgCount() == 0) return null;
-            return new ArrayList<String>(messageList.subList(
+            return new ArrayList<E>(messageList.subList(
                     getMsgCount() > count ? getMsgCount() - count : 0,
                             getMsgCount()));
         }
